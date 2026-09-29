@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store';
-import { sendMessage, clearMessages, updateMessage, saveConversationLocally } from '@/store/slices/chatSlice';
+import { sendMessage, updateMessage, saveConversationLocally } from '@/store/slices/chatSlice';
 import AgentMessage from '@/components/chat/AgentMessage';
 import UserMessage from '@/components/chat/UserMessage';
 import { 
@@ -15,10 +15,12 @@ import {
   Building2, 
   Sun,
   CheckCircle,
-  Clock,
-  Copy
+  FileText,
+  FileJson
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { cn } from '@/utils/cn';
+import { exportChatMessages, isChatEmpty } from '@/utils/format';
 
 // Speech Recognition types
 interface SpeechRecognition extends EventTarget {
@@ -78,8 +80,8 @@ export const ChatEngine: React.FC = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [showTools, setShowTools] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
-  const [speechResult, setSpeechResult] = useState('');
-  const [isListening, setIsListening] = useState(false);
+  const [, setSpeechResult] = useState('');
+  const [, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -189,8 +191,9 @@ export const ChatEngine: React.FC = () => {
         : message;
       
       await dispatch(sendMessage(queryWithTool)).unwrap();
-    } catch (error: any) {
-      toast.error(error || 'Failed to send message');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Failed to send message';
+      toast.error(errorMessage);
     }
   };
 
@@ -239,6 +242,19 @@ export const ChatEngine: React.FC = () => {
 
   const handleToolSelect = (toolName: string) => {
     setSelectedTool(selectedTool === toolName ? null : toolName);
+  };
+
+  const isChatEmptyState = isChatEmpty(messages);
+
+  const handleExport = (format: 'md' | 'json') => {
+    if (isChatEmpty(messages)) {
+      toast.error('Chat is empty. Nothing to export.');
+      return;
+    }
+    const result = exportChatMessages(messages, format, currentConversation?.id);
+    if (result.success) {
+      toast.success(`Chat exported as ${format === 'json' ? 'JSON' : 'Markdown'}`);
+    }
   };
 
   const renderInput = (isSticky: boolean = false) => (
@@ -349,6 +365,74 @@ export const ChatEngine: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-[#0F0F23] text-white overflow-hidden relative">
+      {/* Active chat header with export actions */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800/60 bg-[#0F0F23]/80 backdrop-blur-md z-20">
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-medium text-gray-200">
+            {currentConversation?.title || 'Active Chat'}
+          </span>
+          <span className="text-xs text-gray-500 font-mono">
+            ({messages.length} {messages.length === 1 ? 'message' : 'messages'})
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2" data-testid="chat-export-actions">
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => handleExport('md')}
+              disabled={isChatEmptyState}
+              title={isChatEmptyState ? 'Chat is empty (nothing to export)' : 'Export as Markdown'}
+              className={cn(
+                'flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                isChatEmptyState
+                  ? 'border-gray-800 text-gray-600 bg-gray-900/40 cursor-not-allowed opacity-60'
+                  : 'border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800/80 bg-gray-900/60'
+              )}
+              aria-label="Export as Markdown"
+            >
+              <FileText className="h-3.5 w-3.5 text-purple-400" />
+              <span>Export as Markdown</span>
+            </button>
+            {isChatEmptyState && (
+              <div
+                role="tooltip"
+                className="absolute right-0 top-full mt-1 hidden group-hover:block z-30 px-2 py-1 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded shadow-lg whitespace-nowrap"
+              >
+                Chat is empty (nothing to export)
+              </div>
+            )}
+          </div>
+
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => handleExport('json')}
+              disabled={isChatEmptyState}
+              title={isChatEmptyState ? 'Chat is empty (nothing to export)' : 'Export as JSON'}
+              className={cn(
+                'flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                isChatEmptyState
+                  ? 'border-gray-800 text-gray-600 bg-gray-900/40 cursor-not-allowed opacity-60'
+                  : 'border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800/80 bg-gray-900/60'
+              )}
+              aria-label="Export as JSON"
+            >
+              <FileJson className="h-3.5 w-3.5 text-blue-400" />
+              <span>Export as JSON</span>
+            </button>
+            {isChatEmptyState && (
+              <div
+                role="tooltip"
+                className="absolute right-0 top-full mt-1 hidden group-hover:block z-30 px-2 py-1 text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded shadow-lg whitespace-nowrap"
+              >
+                Chat is empty (nothing to export)
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-8">
